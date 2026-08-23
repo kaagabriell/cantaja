@@ -633,8 +633,9 @@ export default function LandingPage() {
           <div>
             <h4 className="font-bold text-xs tracking-widest uppercase text-white/50 mb-4 md:mb-6">Links</h4>
             <ul className="space-y-3 text-sm text-text-gray">
+              <li><Link to="/" className="hover:text-white transition-colors">CantaJa</Link></li>
               <li><a href="https://www.instagram.com/cantaja/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Instagram</a></li>
-              <li><span className="cursor-default">Comunidade</span></li>
+              <li><Link to="/threads-autopilot" className="hover:text-white transition-colors">Threads Autopilot</Link></li>
             </ul>
           </div>
           
@@ -656,6 +657,22 @@ export default function LandingPage() {
                 >
                   Política de Privacidade
                 </button>
+              </li>
+              <li>
+                <Link 
+                  to="/threads-autopilot/privacidade" 
+                  className="hover:text-white transition-colors text-left block"
+                >
+                  Privacidade Threads Autopilot
+                </Link>
+              </li>
+              <li>
+                <Link 
+                  to="/threads-autopilot/exclusao-de-dados" 
+                  className="hover:text-white transition-colors text-left block"
+                >
+                  Exclusão de Dados
+                </Link>
               </li>
             </ul>
           </div>
