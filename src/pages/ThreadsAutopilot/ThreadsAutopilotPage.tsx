@@ -23,21 +23,6 @@ import { MetaFooter } from "../../components/threads-autopilot/MetaFooter";
 import { SEOHead } from "../../components/threads-autopilot/SEOHead";
 
 export default function ThreadsAutopilotPage() {
-  const structuredData = {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "Threads Autopilot",
-    "applicationCategory": "BusinessApplication",
-    "operatingSystem": "Web",
-    "url": "https://cantaja.com.br/threads-autopilot",
-    "description": "Ferramenta interna da KaaGabriell para publicar conteúdo e interagir com publicações públicas no Threads.",
-    "author": {
-      "@type": "Organization",
-      "name": "56.253.940 KAUA HENRIQUE SOUZA GABRIEL",
-      "url": "https://cantaja.com.br"
-    }
-  };
-
   const fadeUp = {
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } }
@@ -49,7 +34,6 @@ export default function ThreadsAutopilotPage() {
         title="Threads Autopilot | Automação interna da KaaGabriell"
         description="Conheça o Threads Autopilot, ferramenta interna da KaaGabriell para publicar conteúdo e interagir com publicações públicas no Threads."
         canonical="https://cantaja.com.br/threads-autopilot"
-        structuredData={structuredData}
       />
 
       <MetaHeader showNavLinks={true} />

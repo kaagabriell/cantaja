@@ -58,7 +58,21 @@ async function startServer() {
       route: "/threads-autopilot",
       title: "Threads Autopilot | Automação interna da KaaGabriell",
       description: "Conheça o Threads Autopilot, ferramenta interna da KaaGabriell para publicar conteúdo e interagir com publicações públicas no Threads.",
-      canonical: "https://cantaja.com.br/threads-autopilot"
+      canonical: "https://cantaja.com.br/threads-autopilot",
+      structuredData: {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Threads Autopilot",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "url": "https://cantaja.com.br/threads-autopilot",
+        "description": "Ferramenta interna da KaaGabriell para publicar conteúdo e interagir com publicações públicas no Threads.",
+        "author": {
+          "@type": "Organization",
+          "name": "56.253.940 KAUA HENRIQUE SOUZA GABRIEL",
+          "url": "https://cantaja.com.br"
+        }
+      }
     },
     {
       route: "/threads-autopilot/privacidade",
@@ -103,7 +117,8 @@ async function startServer() {
     <meta property="og:title" content="${matched.title}" />
     <meta property="og:description" content="${matched.description}" />
     <meta property="og:url" content="${matched.canonical}" />
-    <meta property="og:type" content="website" />`;
+    <meta property="og:type" content="website" />
+    ${matched.structuredData ? `<script type="application/ld+json">${JSON.stringify(matched.structuredData)}</script>` : ''}`;
 
         template = template.replace("</head>", `${metaTags}\n  </head>`);
         res.status(200).set({ "Content-Type": "text/html; charset=utf-8" }).end(template);

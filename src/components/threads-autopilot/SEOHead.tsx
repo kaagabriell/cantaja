@@ -5,7 +5,6 @@ interface SEOHeadProps {
   description: string;
   canonical: string;
   robots?: string;
-  structuredData?: object;
 }
 
 export function SEOHead({
@@ -13,7 +12,6 @@ export function SEOHead({
   description,
   canonical,
   robots = "index,follow",
-  structuredData,
 }: SEOHeadProps) {
   useEffect(() => {
     // Document title
@@ -84,31 +82,7 @@ export function SEOHead({
       document.head.appendChild(ogType);
     }
     ogType.setAttribute("content", "website");
-
-    // JSON-LD Structured Data
-    const scriptId = "json-ld-threads-autopilot";
-    let jsonLdScript = document.getElementById(scriptId) as HTMLScriptElement | null;
-    
-    if (structuredData) {
-      if (!jsonLdScript) {
-        jsonLdScript = document.createElement("script");
-        jsonLdScript.id = scriptId;
-        jsonLdScript.type = "application/ld+json";
-        document.head.appendChild(jsonLdScript);
-      }
-      jsonLdScript.textContent = JSON.stringify(structuredData);
-    } else if (jsonLdScript) {
-      jsonLdScript.remove();
-    }
-
-    return () => {
-      // Cleanup structured data if needed
-      const existingScript = document.getElementById(scriptId);
-      if (existingScript) {
-        existingScript.remove();
-      }
-    };
-  }, [title, description, canonical, robots, structuredData]);
+  }, [title, description, canonical, robots]);
 
   return null;
 }
