@@ -50,7 +50,7 @@ export default function ThreadsPrivacyPage() {
             Política de Privacidade do Threads Autopilot
           </h1>
           <p className="text-sm text-[#A1A1AA]">
-            Última atualização: 2026 | Versão 1.0 (Específica para a integração Threads)
+            Última atualização: 23 de agosto de 2026 | Versão 1.0 (Específica para a integração Threads)
           </p>
         </div>
 
@@ -143,7 +143,7 @@ export default function ThreadsPrivacyPage() {
               <ul className="list-disc list-inside space-y-2 pl-2">
                 <li><strong>Publicação de conteúdo:</strong> viabilizar o agendamento e a publicação de textos no perfil autorizado da KaaGabriell.</li>
                 <li><strong>Pesquisa de palavras-chave:</strong> monitorar menções e tópicos públicos relevantes relacionados aos serviços de desenvolvimento web, aplicativos, marketing, tráfego pago e negócios digitais.</li>
-                <li><strong>Interação contextual:</strong> formular e publicar respostas concisas e pertinentes a conversas públicas públicas encontradas.</li>
+                <li><strong>Interação contextual:</strong> formular e publicar respostas concisas e pertinentes a conversas públicas encontradas.</li>
                 <li><strong>Prevenção de spam e duplicidade:</strong> manter histórico temporário para garantir que respostas não sejam repetidas para o mesmo post público.</li>
               </ul>
             </section>
@@ -245,13 +245,14 @@ export default function ThreadsPrivacyPage() {
             <section id="contato" className="space-y-4 scroll-mt-28">
               <h2 className="text-xl md:text-2xl font-semibold text-white">11. Canal de Contato</h2>
               <p>
-                Para esclarecimentos sobre a privacidade do Threads Autopilot, o responsável pode entrar em contato através do canal oficial:
+                Para esclarecimentos, revogação de consentimento ou solicitações relacionadas aos dados processados pelo Threads Autopilot, o titular pode entrar em contato pelo canal oficial abaixo.
               </p>
-              <div className="bg-[#111111] border border-white/10 rounded-2xl p-5 text-sm space-y-2">
-                {/* TODO: confirmar canal público antes da análise da Meta */}
-                <p><strong>Canal Oficial:</strong> Disponível no site oficial da CantaJa</p>
+              <div className="bg-[#111111] border border-white/10 rounded-2xl p-6 text-sm space-y-2.5 text-white/90">
+                <p><strong>E-mail:</strong> <a href="mailto:kauabrgamer900@gmail.com" className="text-brand-neon hover:underline">kauabrgamer900@gmail.com</a></p>
                 <p><strong>Site:</strong> <a href="https://cantaja.com.br" className="text-brand-neon hover:underline">https://cantaja.com.br</a></p>
-                <p><strong>Responsável pelo Tratamento:</strong> Kaua Henrique Souza Gabriel (KaaGabriell)</p>
+                <p><strong>Responsável pelo tratamento:</strong> Kaua Henrique Souza Gabriel</p>
+                <p><strong>Nome empresarial:</strong> 56.253.940 KAUA HENRIQUE SOUZA GABRIEL</p>
+                <p><strong>CNPJ:</strong> 56.253.940/0001-47</p>
               </div>
             </section>
 

@@ -44,7 +44,10 @@ export default function ThreadsDeletionPage() {
           <h1 className="text-3xl sm:text-5xl font-medium tracking-tight text-white leading-tight">
             Revogação e exclusão de dados do Threads Autopilot
           </h1>
-          <p className="text-base sm:text-lg text-[#A1A1AA] leading-relaxed max-w-3xl">
+          <p className="text-sm text-[#A1A1AA]">
+            Última atualização: 23 de agosto de 2026 | Versão 1.0
+          </p>
+          <p className="text-base sm:text-lg text-[#A1A1AA] leading-relaxed max-w-3xl pt-2">
             Em total conformidade com a Lei Geral de Proteção de Dados (LGPD) e com as Políticas de Plataforma e Termos de Desenvolvedor da Meta, disponibilizamos mecanismos simples e diretos para que o titular do perfil conectado possa revogar permissões e solicitar a exclusão integral de seus dados.
           </p>
         </div>
@@ -109,11 +112,18 @@ export default function ThreadsDeletionPage() {
 
             <div className="space-y-4 bg-[#1A1A1A] p-6 rounded-2xl border border-white/5 text-sm">
               <h3 className="font-semibold text-white text-base">Instruções para o Titular:</h3>
-              <ol className="list-decimal list-inside space-y-2 text-[#A1A1AA] pl-1">
-                <li>Acesse o canal oficial de atendimento da empresa pelo site oficial <strong>https://cantaja.com.br</strong>.</li>
-                <li>Informe na mensagem que deseja a <strong>Exclusão de Dados do Threads Autopilot</strong>.</li>
-                <li>Forneça o <strong>nome de usuário (@username)</strong> do perfil do Threads que foi conectado.</li>
-              </ol>
+              <p className="text-[#A1A1AA] leading-relaxed">
+                Envie uma solicitação para <a href="mailto:kauabrgamer900@gmail.com" className="text-brand-neon font-semibold hover:underline">kauabrgamer900@gmail.com</a> com o assunto <strong>“Exclusão de Dados do Threads Autopilot”</strong>. Informe o <strong>nome de usuário (@username)</strong> do perfil do Threads conectado. A titularidade será verificada antes da exclusão para impedir solicitações indevidas.
+              </p>
+
+              <div className="pt-2">
+                <a
+                  href="mailto:kauabrgamer900@gmail.com?subject=Exclusão%20de%20Dados%20do%20Threads%20Autopilot"
+                  className="inline-flex items-center justify-center bg-brand-neon text-black px-6 py-3 rounded-full font-bold text-xs sm:text-sm hover:bg-brand-neon-hover transition-colors shadow-[0_0_20px_rgba(212,255,0,0.15)] min-h-[44px]"
+                >
+                  Solicitar exclusão por e-mail
+                </a>
+              </div>
             </div>
 
             <div className="space-y-3 text-sm">
@@ -125,15 +135,14 @@ export default function ThreadsDeletionPage() {
                 </li>
                 <li className="flex items-start gap-2.5">
                   <CheckCircle2 className="w-4 h-4 text-brand-neon flex-shrink-0 mt-1" aria-hidden="true" />
-                  <span><strong>Exclusão e anonimização:</strong> Após a confirmação, os tokens de acesso, identificadores operacionais e trechos em cache serão excluídos definitivamente ou anonimizados em até 5 dias úteis, ressalvadas eventuais obrigações legais de guarda.</span>
+                  <span><strong>Exclusão e anonimização:</strong> Após a confirmação, os tokens de acesso, identificadores operacionais e trechos em cache serão excluídos definitivamente ou anonimizados pelo responsável pelo tratamento em até 5 dias úteis, ressalvadas eventuais obrigações legais de guarda.</span>
                 </li>
               </ul>
             </div>
 
-            {/* TODO: confirmar canal público antes da análise da Meta */}
             <div className="pt-4 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs">
               <span className="text-[#A1A1AA]">
-                Canal de solicitação oficial: <Link to="/" className="text-white hover:text-brand-neon underline underline-offset-2">Site Oficial CantaJa</Link>
+                Canal de contato: <a href="mailto:kauabrgamer900@gmail.com" className="text-white hover:text-brand-neon underline underline-offset-2 font-medium">kauabrgamer900@gmail.com</a>
               </span>
               <Link to="/threads-autopilot/privacidade" className="text-brand-neon hover:underline">
                 Ler Política de Privacidade completa →
@@ -142,9 +151,10 @@ export default function ThreadsDeletionPage() {
           </section>
 
           {/* Legal Identity Reminder */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-xs text-[#A1A1AA] space-y-1">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-xs text-[#A1A1AA] space-y-1.5">
             <p><strong>Controlador dos Dados:</strong> 56.253.940 KAUA HENRIQUE SOUZA GABRIEL</p>
             <p><strong>CNPJ:</strong> 56.253.940/0001-47 | <strong>País:</strong> Brasil</p>
+            <p><strong>E-mail oficial:</strong> <a href="mailto:kauabrgamer900@gmail.com" className="text-brand-neon hover:underline">kauabrgamer900@gmail.com</a></p>
             <p><strong>Aplicação:</strong> Threads Autopilot (Ferramenta interna de desenvolvimento e operação institucional)</p>
           </div>
 

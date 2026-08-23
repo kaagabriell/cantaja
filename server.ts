@@ -52,18 +52,84 @@ async function startServer() {
     }
   });
 
+  // Serve pre-rendered HTML for Threads Autopilot routes in development and production
+  const threadsRoutes = [
+    {
+      route: "/threads-autopilot",
+      title: "Threads Autopilot | Automação interna da KaaGabriell",
+      description: "Conheça o Threads Autopilot, ferramenta interna da KaaGabriell para publicar conteúdo e interagir com publicações públicas no Threads.",
+      canonical: "https://cantaja.com.br/threads-autopilot"
+    },
+    {
+      route: "/threads-autopilot/privacidade",
+      title: "Privacidade | Threads Autopilot",
+      description: "Saiba quais dados o Threads Autopilot processa, para quais finalidades e como o titular mantém o controle.",
+      canonical: "https://cantaja.com.br/threads-autopilot/privacidade"
+    },
+    {
+      route: "/threads-autopilot/exclusao-de-dados",
+      title: "Exclusão de dados | Threads Autopilot",
+      description: "Instruções para revogar o acesso e solicitar a exclusão de dados do Threads Autopilot.",
+      canonical: "https://cantaja.com.br/threads-autopilot/exclusao-de-dados"
+    }
+  ];
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
+
+    // Intercept specific routes in dev mode to inject correct HTML metadata for crawlers / curl
+    app.get(["/threads-autopilot", "/threads-autopilot/privacidade", "/threads-autopilot/exclusao-de-dados"], async (req, res, next) => {
+      try {
+        const url = req.originalUrl.split("?")[0].replace(/\/$/, "");
+        const matched = threadsRoutes.find(r => r.route === url);
+        if (!matched) return next();
+
+        const fs = await import("fs");
+        let template = fs.readFileSync(path.resolve(process.cwd(), "index.html"), "utf-8");
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+
+        // Inject Portuguese language and specific metadata
+        template = template.replace('<html lang="en">', '<html lang="pt-BR">');
+        template = template.replace(/<title>.*?<\/title>/, `<title>${matched.title}</title>`);
+        
+        const metaTags = `
+    <meta name="description" content="${matched.description}" />
+    <link rel="canonical" href="${matched.canonical}" />
+    <meta name="robots" content="index,follow" />
+    <meta property="og:title" content="${matched.title}" />
+    <meta property="og:description" content="${matched.description}" />
+    <meta property="og:url" content="${matched.canonical}" />
+    <meta property="og:type" content="website" />`;
+
+        template = template.replace("</head>", `${metaTags}\n  </head>`);
+        res.status(200).set({ "Content-Type": "text/html; charset=utf-8" }).end(template);
+      } catch (e) {
+        next(e);
+      }
+    });
+
     app.use(vite.middlewares);
   } else {
+    const fs = await import("fs");
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    // Since Express v4 is used in package.json
+
     app.get('*', (req, res) => {
+      const normalizedPath = req.path.replace(/\/$/, "");
+      const specificDirHtml = path.join(distPath, normalizedPath, "index.html");
+      const specificFlatHtml = path.join(distPath, `${normalizedPath}.html`);
+
+      if (fs.existsSync(specificDirHtml)) {
+        return res.sendFile(specificDirHtml);
+      }
+      if (fs.existsSync(specificFlatHtml)) {
+        return res.sendFile(specificFlatHtml);
+      }
+
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

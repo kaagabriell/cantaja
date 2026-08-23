@@ -201,7 +201,7 @@ export default function ThreadsAutopilotPage() {
               {/* Safety banner at bottom of card */}
               <div className="mt-6 pt-4 border-t border-white/10 flex items-center gap-2 text-[11px] text-[#A1A1AA]">
                 <Lock className="w-3.5 h-3.5 text-brand-neon flex-shrink-0" aria-hidden="true" />
-                <span>Nenhum dado pessoal ou mensagem privada é coletado ou armazenado.</span>
+                <span>Nenhuma mensagem privada é acessada. Os dados pessoais processados são limitados às informações básicas do perfil autorizado e ao necessário para operar a integração.</span>
               </div>
             </motion.div>
 
@@ -603,21 +603,26 @@ export default function ThreadsAutopilotPage() {
                   https://cantaja.com.br
                 </a>
               </div>
-              <div className="sm:col-span-2">
+              <div>
+                <span className="text-xs uppercase tracking-wider text-white/50 block mb-1">E-mail para privacidade e exclusão</span>
+                <a href="mailto:kauabrgamer900@gmail.com" className="text-sm sm:text-base font-semibold text-brand-neon hover:underline">
+                  kauabrgamer900@gmail.com
+                </a>
+              </div>
+              <div>
                 <span className="text-xs uppercase tracking-wider text-white/50 block mb-1">Finalidade</span>
                 <span className="text-sm text-[#A1A1AA]">Ferramenta interna para o perfil próprio da empresa no Threads.</span>
               </div>
             </div>
 
             <div className="mt-8 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-[#A1A1AA]">
-              {/* TODO: confirmar canal público antes da análise da Meta */}
               <p>
-                Contato disponível pelo site oficial da CantaJa:{" "}
-                <Link to="/" className="text-white hover:text-brand-neon font-medium underline underline-offset-2">
-                  Acessar página principal
-                </Link>
+                Canal de contato e suporte:{" "}
+                <a href="mailto:kauabrgamer900@gmail.com" className="text-white hover:text-brand-neon font-medium underline underline-offset-2">
+                  kauabrgamer900@gmail.com
+                </a>
               </p>
-              <span className="text-white/40">Atualizado para verificação Meta em 2026</span>
+              <span className="text-white/40">Atualizado para verificação Meta em 23 de agosto de 2026</span>
             </div>
           </div>
         </section>

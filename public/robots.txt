@@ -1,0 +1,36 @@
+# robots.txt for https://cantaja.com.br
+
+# Permit Meta / Threads crawlers for sharing, previews and review verification
+User-agent: facebookexternalhit
+Allow: /threads-autopilot
+Allow: /threads-autopilot/privacidade
+Allow: /threads-autopilot/exclusao-de-dados
+Allow: /
+
+User-agent: Facebot
+Allow: /threads-autopilot
+Allow: /threads-autopilot/privacidade
+Allow: /threads-autopilot/exclusao-de-dados
+Allow: /
+
+# General Search Engines
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/
+
+# AI Scraping restrictions (preserves restrictions as requested)
+User-agent: GPTBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: AnthropicAI
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
