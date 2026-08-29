@@ -1,616 +1,472 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import { motion } from "motion/react";
-import { Link } from "react-router-dom";
-import { 
-  Shield, 
-  Lock, 
-  KeyRound, 
-  Search, 
-  Send, 
-  MessageSquare, 
-  Layers, 
-  CheckCircle2, 
-  XCircle, 
-  Building2, 
-  Calendar, 
-  FileText, 
-  ChevronRight, 
+import {
+  ArrowRight,
+  Check,
+  CircleAlert,
   ExternalLink,
+  Link2,
+  LoaderCircle,
+  LogOut,
+  MessageCircleReply,
+  RefreshCw,
+  Search,
+  Send,
   ShieldCheck,
-  AlertTriangle
+  Unplug,
 } from "lucide-react";
 import { MetaHeader } from "../../components/threads-autopilot/MetaHeader";
 import { MetaFooter } from "../../components/threads-autopilot/MetaFooter";
 import { SEOHead } from "../../components/threads-autopilot/SEOHead";
 
+const FUNCTION_BASE = "https://pufbbtfsptqkpjwkghcg.supabase.co/functions/v1";
+const OAUTH_START_URL = `${FUNCTION_BASE}/threads-oauth/start`;
+const DASHBOARD_URL = `${FUNCTION_BASE}/threads-dashboard`;
+const SESSION_KEY = "threads_autopilot_session";
+
+const permissions = [
+  ["threads_basic", "Identificar o perfil autorizado e acessar as informações básicas necessárias para operar a integração."],
+  ["threads_content_publish", "Criar e publicar conteúdo no perfil do Threads conectado pelo responsável da empresa."],
+  ["threads_keyword_search", "Pesquisar conteúdo público por palavras-chave relacionadas aos assuntos de atuação da empresa."],
+  ["threads_manage_replies", "Publicar respostas em nome do perfil autorizado em conversas públicas pertinentes."],
+  ["threads_read_replies", "Ler respostas às publicações do próprio perfil para manter contexto e acompanhar as interações."],
+] as const;
+
+type Account = {
+  id: string;
+  username?: string;
+  connectedAt?: string;
+  tokenExpiresAt?: string;
+};
+
+type ThreadItem = {
+  id: string;
+  text?: string;
+  username?: string;
+  permalink?: string;
+  timestamp?: string;
+};
+
+type Notice = { kind: "success" | "error"; message: string } | null;
+
+async function dashboardRequest<T>(session: string, body: Record<string, unknown>): Promise<T> {
+  const response = await fetch(DASHBOARD_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${session}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error ?? "Não foi possível concluir a solicitação.");
+  return result as T;
+}
+
+function formatDate(value?: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function ThreadCard({
+  item,
+  actionLabel,
+  onAction,
+}: {
+  item: ThreadItem;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <article className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 transition hover:border-lime-300/30">
+      <div className="mb-3 flex items-center justify-between gap-3 text-xs text-white/45">
+        <span>{item.username ? `@${item.username}` : "Publicação"}</span>
+        <span>{formatDate(item.timestamp)}</span>
+      </div>
+      <p className="whitespace-pre-wrap text-sm leading-6 text-white/80">
+        {item.text || "Publicação sem texto disponível."}
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {actionLabel && onAction ? (
+          <button
+            type="button"
+            onClick={onAction}
+            className="rounded-full border border-lime-300/30 px-3 py-1.5 text-xs font-medium text-lime-200 transition hover:bg-lime-300/10"
+          >
+            {actionLabel}
+          </button>
+        ) : null}
+        {item.permalink ? (
+          <a
+            href={item.permalink}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1.5 text-xs text-white/60 transition hover:border-white/25 hover:text-white"
+          >
+            Abrir no Threads <ExternalLink className="h-3 w-3" />
+          </a>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
 export default function ThreadsAutopilotPage() {
-  const fadeUp = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } }
-  };
+  const [session, setSession] = useState("");
+  const [account, setAccount] = useState<Account | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState(true);
+  const [busy, setBusy] = useState("");
+  const [notice, setNotice] = useState<Notice>(null);
+  const [postText, setPostText] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<ThreadItem[]>([]);
+  const [ownThreads, setOwnThreads] = useState<ThreadItem[]>([]);
+  const [replies, setReplies] = useState<ThreadItem[]>([]);
+  const [selectedThread, setSelectedThread] = useState<ThreadItem | null>(null);
+  const [replyTarget, setReplyTarget] = useState<ThreadItem | null>(null);
+  const [replyText, setReplyText] = useState("");
+
+  const connected = Boolean(session && account);
+
+  const clearSession = useCallback(() => {
+    localStorage.removeItem(SESSION_KEY);
+    setSession("");
+    setAccount(null);
+    setOwnThreads([]);
+    setReplies([]);
+    setSearchResults([]);
+  }, []);
+
+  useEffect(() => {
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const incomingSession = hash.get("session");
+    if (incomingSession) {
+      localStorage.setItem(SESSION_KEY, incomingSession);
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    }
+    setSession(incomingSession || localStorage.getItem(SESSION_KEY) || "");
+  }, []);
+
+  const loadStatus = useCallback(async () => {
+    if (!session) {
+      setLoadingStatus(false);
+      return;
+    }
+    setLoadingStatus(true);
+    try {
+      const result = await dashboardRequest<{ connected: boolean; account: Account }>(session, { action: "status" });
+      setAccount(result.connected ? result.account : null);
+    } catch {
+      clearSession();
+    } finally {
+      setLoadingStatus(false);
+    }
+  }, [clearSession, session]);
+
+  useEffect(() => {
+    void loadStatus();
+  }, [loadStatus]);
+
+  const run = useCallback(async <T,>(name: string, task: () => Promise<T>) => {
+    setBusy(name);
+    setNotice(null);
+    try {
+      return await task();
+    } catch (error) {
+      setNotice({ kind: "error", message: error instanceof Error ? error.message : "Ocorreu um erro inesperado." });
+      return null;
+    } finally {
+      setBusy("");
+    }
+  }, []);
+
+  async function publish(event: FormEvent) {
+    event.preventDefault();
+    const text = postText.trim();
+    if (!text) return;
+    const result = await run("publish", () => dashboardRequest<{ postId: string }>(session, { action: "publish", text }));
+    if (result) {
+      setPostText("");
+      setNotice({ kind: "success", message: "Publicação enviada com sucesso." });
+      void loadOwnThreads();
+    }
+  }
+
+  async function searchThreads(event: FormEvent) {
+    event.preventDefault();
+    const query = searchQuery.trim();
+    if (!query) return;
+    const result = await run("search", () => dashboardRequest<{ data: ThreadItem[] }>(session, { action: "search", query }));
+    if (result) setSearchResults(result.data);
+  }
+
+  async function loadOwnThreads() {
+    const result = await run("threads", () => dashboardRequest<{ data: ThreadItem[] }>(session, { action: "threads" }));
+    if (result) setOwnThreads(result.data);
+  }
+
+  async function loadReplies(thread: ThreadItem) {
+    setSelectedThread(thread);
+    const result = await run("replies", () => dashboardRequest<{ data: ThreadItem[] }>(session, {
+      action: "replies",
+      threadId: thread.id,
+    }));
+    if (result) setReplies(result.data);
+  }
+
+  async function sendReply(event: FormEvent) {
+    event.preventDefault();
+    if (!replyTarget || !replyText.trim()) return;
+    const result = await run("reply", () => dashboardRequest<{ postId: string }>(session, {
+      action: "reply",
+      threadId: replyTarget.id,
+      text: replyText.trim(),
+    }));
+    if (result) {
+      setReplyText("");
+      setReplyTarget(null);
+      setNotice({ kind: "success", message: "Resposta publicada com sucesso." });
+    }
+  }
+
+  async function disconnect() {
+    const confirmed = window.confirm("Deseja desconectar a conta do Threads e revogar o acesso do aplicativo?");
+    if (!confirmed) return;
+    const result = await run("disconnect", () => dashboardRequest<{ success: boolean }>(session, { action: "disconnect" }));
+    if (result) {
+      clearSession();
+      setNotice({ kind: "success", message: "Conta desconectada e acesso revogado." });
+    }
+  }
+
+  const characterCount = useMemo(() => `${postText.length}/500`, [postText.length]);
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-brand-neon selection:text-black overflow-x-hidden flex flex-col justify-between">
-      <SEOHead 
-        title="Threads Autopilot | Automação interna da KaaGabriell"
-        description="Conheça o Threads Autopilot, ferramenta interna da KaaGabriell para publicar conteúdo e interagir com publicações públicas no Threads."
+    <div className="min-h-screen bg-[#050505] text-white selection:bg-lime-300 selection:text-black">
+      <SEOHead
+        title="Threads Autopilot | Canta Já"
+        description="Painel seguro para publicar, pesquisar e responder no Threads com a API oficial da Meta."
         canonical="https://cantaja.com.br/threads-autopilot"
       />
+      <MetaHeader showNavLinks={false} />
 
-      <MetaHeader showNavLinks={true} />
-
-      <main className="flex-grow">
-        {/* 1. HERO SECTION */}
-        <section className="relative pt-12 md:pt-20 pb-20 md:pb-28 px-6 md:px-12 max-w-[1400px] mx-auto border-b border-white/10">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
-            
-            {/* Left Content */}
-            <motion.div 
-              initial="hidden"
-              animate="visible"
-              variants={fadeUp}
-              className="lg:col-span-7 space-y-6"
+      <main>
+        <section className="relative overflow-hidden border-b border-white/10 px-5 pb-16 pt-28 sm:px-8 lg:px-12">
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute left-[12%] top-10 h-64 w-64 rounded-full bg-lime-300/10 blur-[110px]" />
+            <div className="absolute right-[8%] top-24 h-72 w-72 rounded-full bg-cyan-300/10 blur-[120px]" />
+          </div>
+          <div className="relative mx-auto max-w-7xl">
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55 }}
+              className="max-w-4xl"
             >
-              {/* Eyebrow badge */}
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/15 text-xs font-semibold tracking-wider text-brand-neon uppercase">
-                <span className="w-1.5 h-1.5 rounded-full bg-brand-neon"></span>
-                FERRAMENTA INTERNA | THREADS API
+              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-lime-300/25 bg-lime-300/[0.07] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-lime-200">
+                <ShieldCheck className="h-4 w-4" /> API oficial do Threads
               </div>
-
-              {/* H1 Headline */}
-              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-medium tracking-tight leading-[1.1] text-white">
-                Conteúdo e interação no Threads, com controle e contexto.
+              <h1 className="max-w-3xl text-4xl font-semibold leading-[1.05] tracking-[-0.05em] sm:text-6xl lg:text-7xl">
+                Controle seu conteúdo sem perder sua voz.
               </h1>
-
-              {/* Description Body */}
-              <p className="text-base sm:text-lg text-[#A1A1AA] leading-relaxed max-w-2xl font-normal">
-                O Threads Autopilot é uma ferramenta interna desenvolvida e operada pela KaaGabriell para o próprio perfil da empresa no Threads. Ela organiza publicações, encontra conversas públicas relacionadas ao nosso trabalho e ajuda a produzir respostas curtas e contextuais.
-              </p>
-
-              {/* Badges Pill list */}
-              <div className="flex flex-wrap gap-2.5 pt-2">
-                <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#111111] border border-white/10 text-xs sm:text-sm text-white/90 font-medium">
-                  <CheckCircle2 className="w-4 h-4 text-brand-neon" aria-hidden="true" />
-                  Uso interno
-                </span>
-                <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#111111] border border-white/10 text-xs sm:text-sm text-white/90 font-medium">
-                  <CheckCircle2 className="w-4 h-4 text-brand-neon" aria-hidden="true" />
-                  Apenas perfil próprio
-                </span>
-                <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#111111] border border-white/10 text-xs sm:text-sm text-white/90 font-medium">
-                  <ShieldCheck className="w-4 h-4 text-brand-neon" aria-hidden="true" />
-                  Sem acesso a mensagens privadas
-                </span>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-4">
-                <a 
-                  href="#como-funciona"
-                  className="relative overflow-hidden inline-flex items-center justify-center bg-brand-neon text-black px-7 py-3.5 rounded-full font-bold text-sm md:text-base hover:bg-brand-neon-hover transition-colors shadow-[0_0_30px_rgba(212,255,0,0.20)] text-center group"
-                >
-                  <span className="relative z-10">Entender como funciona</span>
-                  <div className="absolute top-0 h-full w-full z-0 block transform -skew-x-12 bg-gradient-to-r from-transparent via-white/80 to-transparent animate-shine" />
-                </a>
-
-                <Link 
-                  to="/threads-autopilot/privacidade"
-                  className="inline-flex items-center justify-center bg-white/10 hover:bg-white/15 text-white border border-white/15 px-6 py-3.5 rounded-full font-semibold text-sm transition-colors text-center"
-                >
-                  Ver privacidade
-                </Link>
-              </div>
-
-              {/* Microcopy */}
-              <p className="text-xs text-[#A1A1AA]/80 pt-1">
-                Ferramenta em desenvolvimento e restrita ao administrador autorizado da empresa.
+              <p className="mt-6 max-w-2xl text-base leading-7 text-white/60 sm:text-lg">
+                Publique textos, encontre conversas relevantes e responda com contexto em um painel conectado à API oficial da Meta.
               </p>
             </motion.div>
 
-            {/* Right Abstract Flow Graphic (No AI slop, pure SVG/CSS architecture flow) */}
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.6, delay: 0.15 }}
-              className="lg:col-span-5 bg-[#111111] border border-white/10 rounded-[32px] md:rounded-[40px] p-6 sm:p-8 relative overflow-hidden shadow-2xl"
-            >
-              <div className="flex items-center justify-between pb-6 mb-6 border-b border-white/10">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-brand-neon"></div>
-                  <span className="text-xs font-mono tracking-wider text-white/70 uppercase">Pipeline Operacional</span>
+            <div className="mt-10 flex flex-wrap items-center gap-3">
+              {loadingStatus ? (
+                <div className="inline-flex items-center gap-2 text-sm text-white/55">
+                  <LoaderCircle className="h-4 w-4 animate-spin" /> Verificando conexão
                 </div>
-                <span className="text-[11px] font-mono text-[#A1A1AA] bg-white/5 px-2.5 py-1 rounded-md border border-white/10">
-                  Modo: Autorizado
-                </span>
-              </div>
-
-              {/* 4 Pipeline Step Cards */}
-              <div className="space-y-3 relative">
-                <div className="p-4 rounded-2xl bg-[#1A1A1A] border border-white/10 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="w-7 h-7 rounded-lg bg-brand-neon/15 text-brand-neon flex items-center justify-center text-xs font-bold font-mono">01</span>
-                    <div>
-                      <h3 className="text-xs sm:text-sm font-semibold text-white">Planejar</h3>
-                      <p className="text-[11px] text-[#A1A1AA]">Diretrizes e temas de negócios</p>
-                    </div>
+              ) : connected ? (
+                <>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/25 bg-emerald-300/[0.08] px-4 py-2 text-sm text-emerald-200">
+                    <Check className="h-4 w-4" /> Conectado como @{account?.username || account?.id}
                   </div>
-                  <span className="text-[10px] text-white/50 uppercase font-mono">Regras</span>
-                </div>
-
-                <div className="flex justify-center -my-1">
-                  <div className="w-px h-3 bg-brand-neon/30"></div>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-[#1A1A1A] border border-white/10 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="w-7 h-7 rounded-lg bg-brand-neon/15 text-brand-neon flex items-center justify-center text-xs font-bold font-mono">02</span>
-                    <div>
-                      <h3 className="text-xs sm:text-sm font-semibold text-white">Publicar</h3>
-                      <p className="text-[11px] text-[#A1A1AA]">Exclusivo no perfil próprio conectado</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-brand-neon uppercase font-mono font-semibold">Perfil Próprio</span>
-                </div>
-
-                <div className="flex justify-center -my-1">
-                  <div className="w-px h-3 bg-brand-neon/30"></div>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-[#1A1A1A] border border-white/10 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="w-7 h-7 rounded-lg bg-brand-neon/15 text-brand-neon flex items-center justify-center text-xs font-bold font-mono">03</span>
-                    <div>
-                      <h3 className="text-xs sm:text-sm font-semibold text-white">Encontrar</h3>
-                      <p className="text-[11px] text-[#A1A1AA]">Busca por palavras-chave públicas</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-white/50 uppercase font-mono">Público</span>
-                </div>
-
-                <div className="flex justify-center -my-1">
-                  <div className="w-px h-3 bg-brand-neon/30"></div>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-[#1A1A1A] border border-brand-neon/30 flex items-center justify-between bg-brand-neon/[0.03]">
-                  <div className="flex items-center gap-3">
-                    <span className="w-7 h-7 rounded-lg bg-brand-neon text-black flex items-center justify-center text-xs font-bold font-mono">04</span>
-                    <div>
-                      <h3 className="text-xs sm:text-sm font-semibold text-white">Responder</h3>
-                      <p className="text-[11px] text-[#A1A1AA]">Respostas contextuais e objetivas</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-brand-neon uppercase font-mono font-semibold">Com Contexto</span>
-                </div>
-              </div>
-
-              {/* Safety banner at bottom of card */}
-              <div className="mt-6 pt-4 border-t border-white/10 flex items-center gap-2 text-[11px] text-[#A1A1AA]">
-                <Lock className="w-3.5 h-3.5 text-brand-neon flex-shrink-0" aria-hidden="true" />
-                <span>Nenhuma mensagem privada é acessada. Os dados pessoais processados são limitados às informações básicas do perfil autorizado e ao necessário para operar a integração.</span>
-              </div>
-            </motion.div>
-
-          </div>
-        </section>
-
-        {/* 2. VISÃO GERAL SECTION */}
-        <section id="visao-geral" className="py-20 md:py-28 px-6 md:px-12 max-w-[1400px] mx-auto border-b border-white/10">
-          <div className="space-y-4 max-w-3xl mb-12 md:mb-16">
-            <span className="text-xs font-semibold tracking-widest text-brand-neon uppercase">VISÃO GERAL</span>
-            <h2 className="text-2xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-white leading-tight">
-              Uma operação interna, não uma plataforma para terceiros.
-            </h2>
-            <p className="text-base sm:text-lg text-[#A1A1AA] leading-relaxed">
-              O aplicativo não gerencia contas de clientes nem portfólios empresariais de terceiros. A integração é autorizada pelo responsável da KaaGabriell e funciona somente no perfil do Threads conectado por ele.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
-            {/* Card 1 */}
-            <div className="bg-[#111111] border border-white/10 hover:border-brand-neon/40 rounded-[32px] p-8 space-y-4 transition-all duration-200">
-              <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-brand-neon">
-                <Send className="w-6 h-6" aria-hidden="true" />
-              </div>
-              <h3 className="text-xl font-medium text-white">Publicação planejada</h3>
-              <p className="text-sm text-[#A1A1AA] leading-relaxed">
-                Prepara e publica textos sobre sites, aplicativos, marketing, anúncios e negócios digitais no perfil autorizado.
-              </p>
-            </div>
-
-            {/* Card 2 */}
-            <div className="bg-[#111111] border border-white/10 hover:border-brand-neon/40 rounded-[32px] p-8 space-y-4 transition-all duration-200">
-              <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-brand-neon">
-                <Search className="w-6 h-6" aria-hidden="true" />
-              </div>
-              <h3 className="text-xl font-medium text-white">Busca pública relevante</h3>
-              <p className="text-sm text-[#A1A1AA] leading-relaxed">
-                Pesquisa publicações públicas por palavras-chave relacionadas aos serviços da empresa e seleciona somente conversas pertinentes.
-              </p>
-            </div>
-
-            {/* Card 3 */}
-            <div className="bg-[#111111] border border-white/10 hover:border-brand-neon/40 rounded-[32px] p-8 space-y-4 transition-all duration-200">
-              <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-brand-neon">
-                <MessageSquare className="w-6 h-6" aria-hidden="true" />
-              </div>
-              <h3 className="text-xl font-medium text-white">Resposta com contexto</h3>
-              <p className="text-sm text-[#A1A1AA] leading-relaxed">
-                Analisa o texto público encontrado antes de sugerir ou publicar uma resposta objetiva, evitando mensagens repetitivas ou fora de contexto.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* 3. COMO FUNCIONA (LIGHT SECTION) */}
-        <section id="como-funciona" className="bg-[#F4F4F5] text-[#18181B] rounded-t-[48px] md:rounded-t-[64px] py-20 md:py-28 px-6 md:px-12 mt-12">
-          <div className="max-w-[1400px] mx-auto">
-            <div className="space-y-4 max-w-3xl mb-12 md:mb-16">
-              <span className="text-xs font-bold tracking-widest text-black/60 uppercase">COMO FUNCIONA</span>
-              <h2 className="text-2xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-[#18181B] leading-tight">
-                Do planejamento à conversa pública.
-              </h2>
-            </div>
-
-            {/* 4 Steps Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8 mb-12">
-              {/* Step 1 */}
-              <div className="bg-white border border-black/10 rounded-3xl p-7 space-y-4 shadow-sm">
-                <div className="text-3xl font-mono font-bold text-black">01</div>
-                <h3 className="text-xl font-semibold text-[#18181B]">Planejar</h3>
-                <p className="text-sm text-zinc-600 leading-relaxed">
-                  A ferramenta prepara textos curtos com temas definidos pela empresa e aplica regras de linguagem e frequência.
-                </p>
-              </div>
-
-              {/* Step 2 */}
-              <div className="bg-white border border-black/10 rounded-3xl p-7 space-y-4 shadow-sm">
-                <div className="text-3xl font-mono font-bold text-black">02</div>
-                <h3 className="text-xl font-semibold text-[#18181B]">Publicar</h3>
-                <p className="text-sm text-zinc-600 leading-relaxed">
-                  O conteúdo é publicado somente no perfil do Threads que autorizou a integração.
-                </p>
-              </div>
-
-              {/* Step 3 */}
-              <div className="bg-white border border-black/10 rounded-3xl p-7 space-y-4 shadow-sm">
-                <div className="text-3xl font-mono font-bold text-black">03</div>
-                <h3 className="text-xl font-semibold text-[#18181B]">Encontrar</h3>
-                <p className="text-sm text-zinc-600 leading-relaxed">
-                  A busca por palavras-chave retorna publicações públicas relacionadas a sites, aplicativos, anúncios, branding e negócios digitais.
-                </p>
-              </div>
-
-              {/* Step 4 */}
-              <div className="bg-white border border-black/10 rounded-3xl p-7 space-y-4 shadow-sm">
-                <div className="text-3xl font-mono font-bold text-black">04</div>
-                <h3 className="text-xl font-semibold text-[#18181B]">Responder</h3>
-                <p className="text-sm text-zinc-600 leading-relaxed">
-                  Antes de qualquer resposta, a publicação é avaliada quanto à relevância. A resposta deve ser curta, específica e compatível com o assunto original.
-                </p>
-              </div>
-            </div>
-
-            {/* Highlighted Notice */}
-            <div className="bg-black/5 border border-black/10 rounded-2xl p-6 sm:p-8 flex items-start gap-4">
-              <Shield className="w-6 h-6 text-black flex-shrink-0 mt-0.5" aria-hidden="true" />
-              <p className="text-sm sm:text-base text-zinc-800 font-medium leading-relaxed">
-                <strong>Nota de conformidade:</strong> A automação não acessa mensagens privadas, não publica em perfis não autorizados e não promete resolver problemas técnicos sem analisar o contexto.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* 4. PERMISSÕES DA API */}
-        <section id="permissoes" className="py-20 md:py-28 px-6 md:px-12 max-w-[1400px] mx-auto border-b border-white/10">
-          <div className="space-y-4 max-w-3xl mb-12 md:mb-16">
-            <span className="text-xs font-semibold tracking-widest text-brand-neon uppercase">PERMISSÕES DA API</span>
-            <h2 className="text-2xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-white leading-tight">
-              Somente o necessário para a operação descrita.
-            </h2>
-          </div>
-
-          {/* Desktop Table View */}
-          <div className="hidden md:block overflow-x-auto bg-[#111111] border border-white/10 rounded-[32px] p-2">
-            <table className="w-full text-left border-collapse" aria-label="Tabela de permissões da API do Threads">
-              <caption className="sr-only">Relação de permissões solicitadas à API do Threads e suas respectivas finalidades de uso</caption>
-              <thead>
-                <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-white/50">
-                  <th scope="col" className="py-5 px-6 font-semibold">Permissão (Escopo)</th>
-                  <th scope="col" className="py-5 px-6 font-semibold">Finalidade e Uso Operacional</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/10 text-sm">
-                <tr className="hover:bg-white/[0.02] transition-colors">
-                  <td className="py-5 px-6 font-mono font-semibold text-brand-neon whitespace-nowrap">
-                    threads_basic
-                  </td>
-                  <td className="py-5 px-6 text-[#A1A1AA] leading-relaxed">
-                    Identificar o perfil autorizado e acessar as informações básicas necessárias para operar a integração.
-                  </td>
-                </tr>
-                <tr className="hover:bg-white/[0.02] transition-colors">
-                  <td className="py-5 px-6 font-mono font-semibold text-brand-neon whitespace-nowrap">
-                    threads_content_publish
-                  </td>
-                  <td className="py-5 px-6 text-[#A1A1AA] leading-relaxed">
-                    Criar e publicar conteúdo no perfil do Threads conectado pelo responsável da empresa.
-                  </td>
-                </tr>
-                <tr className="hover:bg-white/[0.02] transition-colors">
-                  <td className="py-5 px-6 font-mono font-semibold text-brand-neon whitespace-nowrap">
-                    threads_keyword_search
-                  </td>
-                  <td className="py-5 px-6 text-[#A1A1AA] leading-relaxed">
-                    Pesquisar conteúdo público por palavras-chave relacionadas aos assuntos de atuação da empresa.
-                  </td>
-                </tr>
-                <tr className="hover:bg-white/[0.02] transition-colors">
-                  <td className="py-5 px-6 font-mono font-semibold text-brand-neon whitespace-nowrap">
-                    threads_manage_replies
-                  </td>
-                  <td className="py-5 px-6 text-[#A1A1AA] leading-relaxed">
-                    Publicar respostas em nome do perfil autorizado em conversas públicas pertinentes.
-                  </td>
-                </tr>
-                <tr className="hover:bg-white/[0.02] transition-colors">
-                  <td className="py-5 px-6 font-mono font-semibold text-brand-neon whitespace-nowrap">
-                    threads_read_replies
-                  </td>
-                  <td className="py-5 px-6 text-[#A1A1AA] leading-relaxed">
-                    Ler respostas às publicações do próprio perfil para manter contexto e acompanhar as interações.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile Stacked Cards */}
-          <div className="md:hidden space-y-4">
-            <div className="bg-[#111111] border border-white/10 rounded-2xl p-5 space-y-2">
-              <span className="font-mono font-bold text-brand-neon text-sm">threads_basic</span>
-              <p className="text-sm text-[#A1A1AA] leading-relaxed">
-                Identificar o perfil autorizado e acessar as informações básicas necessárias para operar a integração.
-              </p>
-            </div>
-            <div className="bg-[#111111] border border-white/10 rounded-2xl p-5 space-y-2">
-              <span className="font-mono font-bold text-brand-neon text-sm">threads_content_publish</span>
-              <p className="text-sm text-[#A1A1AA] leading-relaxed">
-                Criar e publicar conteúdo no perfil do Threads conectado pelo responsável da empresa.
-              </p>
-            </div>
-            <div className="bg-[#111111] border border-white/10 rounded-2xl p-5 space-y-2">
-              <span className="font-mono font-bold text-brand-neon text-sm">threads_keyword_search</span>
-              <p className="text-sm text-[#A1A1AA] leading-relaxed">
-                Pesquisar conteúdo público por palavras-chave relacionadas aos assuntos de atuação da empresa.
-              </p>
-            </div>
-            <div className="bg-[#111111] border border-white/10 rounded-2xl p-5 space-y-2">
-              <span className="font-mono font-bold text-brand-neon text-sm">threads_manage_replies</span>
-              <p className="text-sm text-[#A1A1AA] leading-relaxed">
-                Publicar respostas em nome do perfil autorizado em conversas públicas pertinentes.
-              </p>
-            </div>
-            <div className="bg-[#111111] border border-white/10 rounded-2xl p-5 space-y-2">
-              <span className="font-mono font-bold text-brand-neon text-sm">threads_read_replies</span>
-              <p className="text-sm text-[#A1A1AA] leading-relaxed">
-                Ler respostas às publicações do próprio perfil para manter contexto e acompanhar as interações.
-              </p>
-            </div>
-          </div>
-
-          <p className="text-xs sm:text-sm text-[#A1A1AA] mt-6 pt-4 border-t border-white/10">
-            As permissões são usadas exclusivamente no perfil próprio conectado. O Threads Autopilot não solicita acesso a contas de clientes.
-          </p>
-        </section>
-
-        {/* 5. DADOS E SEGURANÇA */}
-        <section id="dados-seguranca" className="py-20 md:py-28 px-6 md:px-12 max-w-[1400px] mx-auto border-b border-white/10">
-          <div className="space-y-4 max-w-3xl mb-12 md:mb-16">
-            <span className="text-xs font-semibold tracking-widest text-brand-neon uppercase">DADOS E SEGURANÇA</span>
-            <h2 className="text-2xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-white leading-tight">
-              Dados mínimos, finalidade definida.
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 mb-12">
-            {/* Category 1 */}
-            <div className="bg-[#111111] border border-white/10 rounded-[28px] p-7 space-y-2">
-              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-brand-neon"></span>
-                Perfil autorizado
-              </h3>
-              <p className="text-sm text-[#A1A1AA] leading-relaxed">
-                Identificador, nome de usuário e informações básicas do perfil conectado, apenas para identificar a conta correta.
-              </p>
-            </div>
-
-            {/* Category 2 */}
-            <div className="bg-[#111111] border border-white/10 rounded-[28px] p-7 space-y-2">
-              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-brand-neon"></span>
-                Conteúdo próprio
-              </h3>
-              <p className="text-sm text-[#A1A1AA] leading-relaxed">
-                Textos, identificadores de publicações e respostas criadas pelo perfil autorizado.
-              </p>
-            </div>
-
-            {/* Category 3 */}
-            <div className="bg-[#111111] border border-white/10 rounded-[28px] p-7 space-y-2">
-              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-brand-neon"></span>
-                Conteúdo público encontrado
-              </h3>
-              <p className="text-sm text-[#A1A1AA] leading-relaxed">
-                Identificadores e trechos de publicações públicas retornadas pela busca por palavras-chave, usados para avaliar relevância e evitar duplicidade.
-              </p>
-            </div>
-
-            {/* Category 4 */}
-            <div className="bg-[#111111] border border-white/10 rounded-[28px] p-7 space-y-2">
-              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-brand-neon"></span>
-                Registros operacionais
-              </h3>
-              <p className="text-sm text-[#A1A1AA] leading-relaxed">
-                Horário, estado da tarefa e identificadores técnicos necessários para agendamento, auditoria e prevenção de ações repetidas.
-              </p>
-            </div>
-          </div>
-
-          {/* Como protegemos block */}
-          <div className="bg-[#161616] border border-white/10 rounded-[32px] p-8 md:p-10 space-y-6">
-            <h3 className="text-xl font-semibold text-white flex items-center gap-2.5">
-              <ShieldCheck className="w-6 h-6 text-brand-neon" aria-hidden="true" />
-              Como protegemos
-            </h3>
-            <ul className="space-y-3 text-sm text-[#A1A1AA] leading-relaxed">
-              <li className="flex items-start gap-3">
-                <CheckCircle2 className="w-4 h-4 text-brand-neon flex-shrink-0 mt-0.5" aria-hidden="true" />
-                <span>Tokens de acesso ficam armazenados como segredos criptografados no ambiente de servidor.</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <CheckCircle2 className="w-4 h-4 text-brand-neon flex-shrink-0 mt-0.5" aria-hidden="true" />
-                <span>Senhas do Threads não são coletadas.</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <CheckCircle2 className="w-4 h-4 text-brand-neon flex-shrink-0 mt-0.5" aria-hidden="true" />
-                <span>Mensagens privadas e conteúdo privado não são acessados.</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <CheckCircle2 className="w-4 h-4 text-brand-neon flex-shrink-0 mt-0.5" aria-hidden="true" />
-                <span>Dados não são vendidos, alugados ou usados para criar perfis publicitários.</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <CheckCircle2 className="w-4 h-4 text-brand-neon flex-shrink-0 mt-0.5" aria-hidden="true" />
-                <span>O acesso é limitado ao administrador autorizado e aos serviços técnicos necessários à operação.</span>
-              </li>
-            </ul>
-          </div>
-        </section>
-
-        {/* 6. LIMITES DA FERRAMENTA */}
-        <section className="py-20 md:py-28 px-6 md:px-12 max-w-[1400px] mx-auto border-b border-white/10">
-          <div className="space-y-4 max-w-3xl mb-12 md:mb-16">
-            <span className="text-xs font-semibold tracking-widest text-brand-neon uppercase">LIMITES CLAROS</span>
-            <h2 className="text-2xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-white leading-tight">
-              O que o Threads Autopilot não faz.
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-            {[
-              "Não gerencia perfis ou portfólios empresariais de clientes.",
-              "Não lê nem envia mensagens diretas.",
-              "Não acessa publicações privadas.",
-              "Não compra seguidores, não cria engajamento falso e não envia respostas em massa sem relação com o assunto.",
-              "Não compartilha dados do Threads com anunciantes ou corretores de dados.",
-              "Não substitui o controle do responsável, que pode revogar a autorização a qualquer momento."
-            ].map((item, idx) => (
-              <div key={idx} className="bg-[#111111] border border-white/10 rounded-2xl p-5 flex items-start gap-3.5">
-                <XCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
-                <span className="text-sm text-[#A1A1AA] leading-relaxed font-medium">{item}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* 7. PRIVACIDADE, RETENÇÃO E EXCLUSÃO */}
-        <section id="privacidade" className="py-20 md:py-28 px-6 md:px-12 max-w-[1400px] mx-auto border-b border-white/10">
-          <div className="space-y-4 max-w-3xl mb-12">
-            <span className="text-xs font-semibold tracking-widest text-brand-neon uppercase">PRIVACIDADE</span>
-            <h2 className="text-2xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-white leading-tight">
-              Controle permanece com o titular.
-            </h2>
-            <p className="text-base text-[#A1A1AA] leading-relaxed">
-              Trechos de conteúdo público e registros operacionais usados para evitar duplicidade são mantidos por até 30 dias. Identificadores de conteúdo próprio podem ser mantidos enquanto a integração estiver ativa para possibilitar operação e auditoria. O token de acesso permanece armazenado somente enquanto for válido e necessário, sendo removido quando a conexão é revogada ou quando a exclusão é concluída.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 mb-10">
-            <div className="bg-[#111111] border border-white/10 rounded-[32px] p-8 space-y-4">
-              <h3 className="text-xl font-medium text-white">Revogar acesso</h3>
-              <p className="text-sm text-[#A1A1AA] leading-relaxed">
-                O responsável pode remover o Threads Autopilot em Threads/Meta, na área de aplicativos e sites conectados. A revogação impede novas ações da integração.
-              </p>
-            </div>
-
-            <div className="bg-[#111111] border border-white/10 rounded-[32px] p-8 space-y-4">
-              <h3 className="text-xl font-medium text-white">Solicitar exclusão</h3>
-              <p className="text-sm text-[#A1A1AA] leading-relaxed">
-                O responsável pode consultar as instruções públicas de exclusão e solicitar a remoção dos dados associados à integração.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-            <Link 
-              to="/threads-autopilot/privacidade"
-              className="inline-flex items-center justify-center bg-white text-black px-7 py-3.5 rounded-full font-bold text-sm hover:bg-zinc-200 transition-colors text-center"
-            >
-              Ler política de privacidade
-            </Link>
-            <Link 
-              to="/threads-autopilot/exclusao-de-dados"
-              className="inline-flex items-center justify-center bg-white/10 hover:bg-white/15 text-white border border-white/15 px-6 py-3.5 rounded-full font-semibold text-sm transition-colors text-center"
-            >
-              Ver exclusão de dados
-            </Link>
-          </div>
-        </section>
-
-        {/* 8. RESPONSÁVEL */}
-        <section id="responsavel" className="py-20 md:py-28 px-6 md:px-12 max-w-[1400px] mx-auto">
-          <div className="space-y-4 max-w-3xl mb-12">
-            <span className="text-xs font-semibold tracking-widest text-brand-neon uppercase">RESPONSÁVEL</span>
-            <h2 className="text-2xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-white leading-tight">
-              Desenvolvido e operado pela KaaGabriell.
-            </h2>
-          </div>
-
-          <div className="bg-[#111111] border border-white/10 rounded-[32px] p-8 md:p-10">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
-              <div>
-                <span className="text-xs uppercase tracking-wider text-white/50 block mb-1">Nome empresarial</span>
-                <span className="text-sm sm:text-base font-semibold text-white">56.253.940 KAUA HENRIQUE SOUZA GABRIEL</span>
-              </div>
-              <div>
-                <span className="text-xs uppercase tracking-wider text-white/50 block mb-1">CNPJ</span>
-                <span className="text-sm sm:text-base font-semibold text-white">56.253.940/0001-47</span>
-              </div>
-              <div>
-                <span className="text-xs uppercase tracking-wider text-white/50 block mb-1">País</span>
-                <span className="text-sm sm:text-base font-semibold text-white">Brasil</span>
-              </div>
-              <div>
-                <span className="text-xs uppercase tracking-wider text-white/50 block mb-1">Site</span>
-                <a href="https://cantaja.com.br" className="text-sm sm:text-base font-semibold text-brand-neon hover:underline">
-                  https://cantaja.com.br
+                  <button
+                    type="button"
+                    onClick={() => void loadStatus()}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-white/60 transition hover:border-white/25 hover:text-white"
+                  >
+                    <RefreshCw className="h-4 w-4" /> Atualizar
+                  </button>
+                </>
+              ) : (
+                <a
+                  href={OAUTH_START_URL}
+                  className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-lime-200"
+                >
+                  <Link2 className="h-4 w-4" /> Conectar conta do Threads <ArrowRight className="h-4 w-4" />
                 </a>
-              </div>
-              <div>
-                <span className="text-xs uppercase tracking-wider text-white/50 block mb-1">E-mail para privacidade e exclusão</span>
-                <a href="mailto:kauabrgamer900@gmail.com" className="text-sm sm:text-base font-semibold text-brand-neon hover:underline">
-                  kauabrgamer900@gmail.com
-                </a>
-              </div>
-              <div>
-                <span className="text-xs uppercase tracking-wider text-white/50 block mb-1">Finalidade</span>
-                <span className="text-sm text-[#A1A1AA]">Ferramenta interna para o perfil próprio da empresa no Threads.</span>
-              </div>
+              )}
             </div>
+          </div>
+        </section>
 
-            <div className="mt-8 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-[#A1A1AA]">
-              <p>
-                Canal de contato e suporte:{" "}
-                <a href="mailto:kauabrgamer900@gmail.com" className="text-white hover:text-brand-neon font-medium underline underline-offset-2">
-                  kauabrgamer900@gmail.com
-                </a>
-              </p>
-              <span className="text-white/40">Atualizado para verificação Meta em 23 de agosto de 2026</span>
-            </div>
+        <section className="px-5 py-12 sm:px-8 lg:px-12">
+          <div className="mx-auto max-w-7xl">
+            {notice ? (
+              <div className={`mb-6 flex items-start gap-3 rounded-2xl border p-4 text-sm ${
+                notice.kind === "success"
+                  ? "border-emerald-300/20 bg-emerald-300/[0.06] text-emerald-100"
+                  : "border-red-300/20 bg-red-300/[0.06] text-red-100"
+              }`}>
+                {notice.kind === "success" ? <Check className="mt-0.5 h-4 w-4" /> : <CircleAlert className="mt-0.5 h-4 w-4" />}
+                <span>{notice.message}</span>
+              </div>
+            ) : null}
+
+            {!connected ? (
+              <div className="grid gap-5 lg:grid-cols-3">
+                {[
+                  ["1", "Conecte sua conta", "A autorização acontece no Threads e pode ser revogada quando quiser."],
+                  ["2", "Use as ferramentas", "Publique, pesquise conversas públicas e leia respostas em um único lugar."],
+                  ["3", "Mantenha o controle", "Nada é publicado sem uma ação iniciada no painel ou uma automação previamente configurada."],
+                ].map(([step, title, body]) => (
+                  <div key={step} className="rounded-3xl border border-white/10 bg-white/[0.025] p-6">
+                    <span className="text-xs font-semibold text-lime-200">ETAPA {step}</span>
+                    <h2 className="mt-4 text-xl font-semibold">{title}</h2>
+                    <p className="mt-3 text-sm leading-6 text-white/50">{body}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid gap-6 xl:grid-cols-2">
+                <section className="rounded-3xl border border-white/10 bg-white/[0.025] p-5 sm:p-7">
+                  <div className="mb-6 flex items-center gap-3">
+                    <div className="rounded-xl bg-lime-300/10 p-2.5 text-lime-200"><Send className="h-5 w-5" /></div>
+                    <div><p className="text-xs uppercase tracking-[0.14em] text-white/40">Publicação</p><h2 className="text-xl font-semibold">Criar texto</h2></div>
+                  </div>
+                  <form onSubmit={publish}>
+                    <textarea
+                      value={postText}
+                      onChange={(event) => setPostText(event.target.value.slice(0, 500))}
+                      rows={8}
+                      placeholder="Escreva de forma direta, humana e útil."
+                      className="w-full resize-none rounded-2xl border border-white/10 bg-black/30 p-4 text-sm leading-6 text-white outline-none transition placeholder:text-white/25 focus:border-lime-300/40"
+                    />
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <span className="text-xs text-white/35">{characterCount}</span>
+                      <button disabled={!postText.trim() || busy === "publish"} className="inline-flex items-center gap-2 rounded-full bg-lime-200 px-4 py-2.5 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-40">
+                        {busy === "publish" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Publicar
+                      </button>
+                    </div>
+                  </form>
+                </section>
+
+                <section className="rounded-3xl border border-white/10 bg-white/[0.025] p-5 sm:p-7">
+                  <div className="mb-6 flex items-center gap-3">
+                    <div className="rounded-xl bg-cyan-300/10 p-2.5 text-cyan-200"><Search className="h-5 w-5" /></div>
+                    <div><p className="text-xs uppercase tracking-[0.14em] text-white/40">Descoberta</p><h2 className="text-xl font-semibold">Pesquisar publicações</h2></div>
+                  </div>
+                  <form onSubmit={searchThreads} className="flex gap-2">
+                    <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Exemplo: preciso de um site" className="min-w-0 flex-1 rounded-full border border-white/10 bg-black/30 px-4 py-3 text-sm outline-none placeholder:text-white/25 focus:border-cyan-300/40" />
+                    <button disabled={!searchQuery.trim() || busy === "search"} className="rounded-full bg-white px-4 py-3 text-sm font-semibold text-black disabled:opacity-40">{busy === "search" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}</button>
+                  </form>
+                  <div className="mt-5 grid max-h-[430px] gap-3 overflow-y-auto pr-1">
+                    {searchResults.length ? searchResults.map((item) => <ThreadCard key={item.id} item={item} actionLabel="Responder" onAction={() => setReplyTarget(item)} />) : <p className="rounded-2xl border border-dashed border-white/10 p-5 text-sm text-white/35">Pesquise um tema para encontrar publicações públicas recentes.</p>}
+                  </div>
+                </section>
+
+                <section className="rounded-3xl border border-white/10 bg-white/[0.025] p-5 sm:p-7 xl:col-span-2">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-3"><div className="rounded-xl bg-violet-300/10 p-2.5 text-violet-200"><MessageCircleReply className="h-5 w-5" /></div><div><p className="text-xs uppercase tracking-[0.14em] text-white/40">Conversas</p><h2 className="text-xl font-semibold">Ler respostas</h2></div></div>
+                    <button type="button" onClick={() => void loadOwnThreads()} disabled={busy === "threads"} className="inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-white/65 transition hover:border-white/25 hover:text-white disabled:opacity-40">{busy === "threads" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Carregar publicações</button>
+                  </div>
+                  <div className="mt-6 grid gap-5 lg:grid-cols-2">
+                    <div className="grid max-h-[500px] gap-3 overflow-y-auto pr-1">{ownThreads.length ? ownThreads.map((item) => <ThreadCard key={item.id} item={item} actionLabel="Ver respostas" onAction={() => void loadReplies(item)} />) : <p className="rounded-2xl border border-dashed border-white/10 p-5 text-sm text-white/35">Carregue suas publicações para selecionar uma conversa.</p>}</div>
+                    <div className="grid max-h-[500px] gap-3 overflow-y-auto pr-1">{selectedThread ? <p className="text-xs uppercase tracking-[0.14em] text-white/35">Respostas da publicação selecionada</p> : null}{replies.length ? replies.map((item) => <ThreadCard key={item.id} item={item} actionLabel="Responder" onAction={() => setReplyTarget(item)} />) : <p className="rounded-2xl border border-dashed border-white/10 p-5 text-sm text-white/35">As respostas aparecerão aqui.</p>}</div>
+                  </div>
+                </section>
+              </div>
+            )}
+
+            <section className="mt-10 grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+              <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6 sm:p-8">
+                <h2 className="text-2xl font-semibold">Instruções para análise da Meta</h2>
+                <ol className="mt-5 grid gap-3 text-sm leading-6 text-white/60">
+                  <li>1. Clique em Conectar conta do Threads e autorize as cinco permissões solicitadas.</li>
+                  <li>2. Use Criar texto para publicar uma mensagem de teste.</li>
+                  <li>3. Pesquise uma palavra-chave pública e abra um resultado.</li>
+                  <li>4. Carregue suas publicações, selecione uma delas e leia as respostas.</li>
+                  <li>5. Use Responder para publicar uma resposta contextual.</li>
+                  <li>6. Use Desconectar conta para revogar o acesso concedido ao aplicativo.</li>
+                </ol>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6 sm:p-8">
+                <h2 className="text-2xl font-semibold">Privacidade e controle</h2>
+                <p className="mt-4 text-sm leading-6 text-white/55">O token de acesso fica criptografado no servidor. Ele não é exposto no código da página nem armazenado no navegador.</p>
+                <div className="mt-6 grid gap-3 text-sm">
+                  <a href="/threads-autopilot/privacidade" className="inline-flex items-center justify-between rounded-2xl border border-white/10 px-4 py-3 text-white/65 transition hover:border-white/25 hover:text-white">Política de privacidade <ArrowRight className="h-4 w-4" /></a>
+                  <a href="/threads-autopilot/exclusao-de-dados" className="inline-flex items-center justify-between rounded-2xl border border-white/10 px-4 py-3 text-white/65 transition hover:border-white/25 hover:text-white">Exclusão de dados <ArrowRight className="h-4 w-4" /></a>
+                </div>
+                {connected ? <button type="button" onClick={() => void disconnect()} disabled={busy === "disconnect"} className="mt-6 inline-flex items-center gap-2 rounded-full border border-red-300/20 px-4 py-2.5 text-sm text-red-200 transition hover:bg-red-300/[0.06] disabled:opacity-40">{busy === "disconnect" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Unplug className="h-4 w-4" />} Desconectar conta</button> : null}
+              </div>
+            </section>
+
+            <section className="mt-10 rounded-3xl border border-white/10 bg-white/[0.025] p-6 sm:p-8">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-lime-200">Permissões da API</p>
+              <h2 className="mt-3 text-2xl font-semibold sm:text-3xl">Somente o necessário para a operação descrita.</h2>
+              <div className="mt-6 overflow-hidden rounded-2xl border border-white/10">
+                <div className="hidden grid-cols-[0.7fr_1.3fr] bg-white/[0.05] px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-white/45 sm:grid">
+                  <span>Permissão</span><span>Finalidade</span>
+                </div>
+                {permissions.map(([scope, purpose]) => (
+                  <div key={scope} className="grid gap-2 border-t border-white/10 px-5 py-4 first:border-t-0 sm:grid-cols-[0.7fr_1.3fr]">
+                    <code className="break-all text-sm text-lime-200">{scope}</code>
+                    <p className="text-sm leading-6 text-white/55">{purpose}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-5 text-sm leading-6 text-white/45">As permissões são usadas exclusivamente no perfil próprio conectado. O Threads Autopilot não solicita acesso a contas de clientes, mensagens privadas ou conteúdo privado.</p>
+            </section>
+
+            <section className="mt-10 grid gap-5 lg:grid-cols-2">
+              <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6 sm:p-8">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">Dados e segurança</p>
+                <h2 className="mt-3 text-2xl font-semibold">Dados mínimos, finalidade definida.</h2>
+                <ul className="mt-5 grid gap-3 text-sm leading-6 text-white/55">
+                  <li>Tokens de acesso ficam armazenados como segredos criptografados no servidor.</li>
+                  <li>Senhas do Threads não são coletadas.</li>
+                  <li>Mensagens privadas e conteúdo privado não são acessados.</li>
+                  <li>Dados não são vendidos, alugados ou usados para criar perfis publicitários.</li>
+                  <li>O responsável pode revogar a autorização a qualquer momento.</li>
+                </ul>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-6 sm:p-8">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-200">Responsável</p>
+                <h2 className="mt-3 text-2xl font-semibold">Desenvolvido e operado pela KaaGabriell.</h2>
+                <dl className="mt-5 grid gap-4 text-sm">
+                  <div><dt className="text-white/35">Nome empresarial</dt><dd className="mt-1 text-white/70">56.253.940 KAUA HENRIQUE SOUZA GABRIEL</dd></div>
+                  <div><dt className="text-white/35">CNPJ</dt><dd className="mt-1 text-white/70">56.253.940/0001-47</dd></div>
+                  <div><dt className="text-white/35">País</dt><dd className="mt-1 text-white/70">Brasil</dd></div>
+                  <div><dt className="text-white/35">Contato</dt><dd className="mt-1"><a href="mailto:kauabrgamer900@gmail.com" className="text-lime-200 hover:underline">kauabrgamer900@gmail.com</a></dd></div>
+                </dl>
+              </div>
+            </section>
           </div>
         </section>
       </main>
+
+      {replyTarget ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-4 backdrop-blur-sm sm:items-center">
+          <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-xl rounded-3xl border border-white/10 bg-[#101010] p-5 shadow-2xl sm:p-7">
+            <div className="flex items-start justify-between gap-4"><div><p className="text-xs uppercase tracking-[0.14em] text-white/35">Responder publicação</p><h2 className="mt-1 text-xl font-semibold">{replyTarget.username ? `@${replyTarget.username}` : "Threads"}</h2></div><button type="button" onClick={() => setReplyTarget(null)} className="rounded-full border border-white/10 p-2 text-white/50 hover:text-white"><LogOut className="h-4 w-4" /></button></div>
+            <p className="mt-4 max-h-28 overflow-y-auto rounded-2xl bg-white/[0.035] p-4 text-sm leading-6 text-white/55">{replyTarget.text}</p>
+            <form onSubmit={sendReply} className="mt-4">
+              <textarea value={replyText} onChange={(event) => setReplyText(event.target.value.slice(0, 500))} rows={5} placeholder="Escreva uma resposta curta e contextual." className="w-full resize-none rounded-2xl border border-white/10 bg-black/30 p-4 text-sm leading-6 outline-none placeholder:text-white/25 focus:border-lime-300/40" />
+              <div className="mt-3 flex justify-end"><button disabled={!replyText.trim() || busy === "reply"} className="inline-flex items-center gap-2 rounded-full bg-lime-200 px-4 py-2.5 text-sm font-semibold text-black disabled:opacity-40">{busy === "reply" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <MessageCircleReply className="h-4 w-4" />} Publicar resposta</button></div>
+            </form>
+          </motion.div>
+        </div>
+      ) : null}
 
       <MetaFooter />
     </div>
