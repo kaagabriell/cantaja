@@ -55,6 +55,11 @@ export function MetaFooter() {
               </Link>
             </li>
             <li>
+              <Link to="/threads-autopilot/termos-de-uso" className="hover:text-white transition-colors duration-200">
+                Termos de Uso
+              </Link>
+            </li>
+            <li>
               <Link to="/threads-autopilot/exclusao-de-dados" className="hover:text-white transition-colors duration-200">
                 Exclusão de Dados & Revogação
               </Link>

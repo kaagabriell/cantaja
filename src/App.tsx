@@ -15,6 +15,7 @@ import Login from './pages/Login';
 import ThreadsAutopilotPage from './pages/ThreadsAutopilot/ThreadsAutopilotPage';
 import ThreadsPrivacyPage from './pages/ThreadsAutopilot/ThreadsPrivacyPage';
 import ThreadsDeletionPage from './pages/ThreadsAutopilot/ThreadsDeletionPage';
+import ThreadsTermsPage from './pages/ThreadsAutopilot/ThreadsTermsPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/threads-autopilot" element={<ThreadsAutopilotPage />} />
         <Route path="/threads-autopilot/privacidade" element={<ThreadsPrivacyPage />} />
         <Route path="/threads-autopilot/exclusao-de-dados" element={<ThreadsDeletionPage />} />
+        <Route path="/threads-autopilot/termos-de-uso" element={<ThreadsTermsPage />} />
 
         {/* Auth Routes */}
         <Route path="/login" element={<Login />} />
@@ -39,10 +41,10 @@ export default function App() {
           <Route path="/pedidos" element={<Pedidos />} />
           <Route path="/clientes" element={<Clientes />} />
         </Route>
-        
+
         {/* Public Routes */}
         <Route path="/f/:formId" element={<PublicForm />} />
-        
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
