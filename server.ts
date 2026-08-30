@@ -85,6 +85,12 @@ async function startServer() {
       title: "Exclusão de dados | Threads Autopilot",
       description: "Instruções para revogar o acesso e solicitar a exclusão de dados do Threads Autopilot.",
       canonical: "https://cantaja.com.br/threads-autopilot/exclusao-de-dados"
+    },
+    {
+      route: "/threads-autopilot/termos-de-uso",
+      title: "Termos de Uso | Threads Autopilot",
+      description: "Condições de uso do Threads Autopilot, ferramenta interna da KaaGabriell integrada ao Threads.",
+      canonical: "https://cantaja.com.br/threads-autopilot/termos-de-uso"
     }
   ];
 
@@ -96,7 +102,7 @@ async function startServer() {
     });
 
     // Intercept specific routes in dev mode to inject correct HTML metadata for crawlers / curl
-    app.get(["/threads-autopilot", "/threads-autopilot/privacidade", "/threads-autopilot/exclusao-de-dados"], async (req, res, next) => {
+    app.get(["/threads-autopilot", "/threads-autopilot/privacidade", "/threads-autopilot/exclusao-de-dados", "/threads-autopilot/termos-de-uso"], async (req, res, next) => {
       try {
         const url = req.originalUrl.split("?")[0].replace(/\/$/, "");
         const matched = threadsRoutes.find(r => r.route === url);
