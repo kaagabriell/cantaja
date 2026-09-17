@@ -49,4 +49,4 @@ Contributions, bug reports, documentation improvements, and feature proposals ar
 
 ## License
 
-A formal open-source license will be added after the repository's pre-publication legal and security review is complete.
+CantaJá is released under the MIT License. See `LICENSE` for details.
