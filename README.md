@@ -1,21 +1,52 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# CantaJá
 
-# Run and deploy your AI Studio app
+CantaJá is an AI-assisted platform for managing the creation and sale of personalized music. The project also contains the Threads Autopilot integration, including public transparency and compliance pages.
 
-This contains everything you need to run your app locally.
+## Overview
 
-View your app in AI Studio: https://ai.studio/apps/e6984676-1639-4737-b8a8-1c99149027cf
+The repository combines a React/TypeScript frontend with server-side services and integrations used by the CantaJá platform. Current areas include personalized-music workflows, AI-assisted functionality, Supabase integration, and Threads Autopilot.
 
-## Run Locally
+## Tech stack
 
-**Prerequisites:**  Node.js
+- React 19 and TypeScript
+- Vite
+- Tailwind CSS
+- Express
+- Supabase
+- Google Gemini APIs
+- Cloudflare Workers / Wrangler
 
+## Local development
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
- 
+### Prerequisites
+
+- Node.js
+- npm
+
+### Setup
+
+1. Clone the repository.
+2. Install dependencies with `npm install`.
+3. Copy `.env.example` to `.env.local`.
+4. Fill only the environment variables required for the features you are developing. Never commit real credentials.
+5. Start the development server with `npm run dev`.
+
+### Useful commands
+
+```bash
+npm run dev
+npm run build
+npm run lint
+```
+
+## Security
+
+Do not commit API keys, access tokens, service-role credentials, private user data, or production secrets. See `SECURITY.md` for vulnerability reporting guidance.
+
+## Contributing
+
+Contributions, bug reports, documentation improvements, and feature proposals are welcome. Read `CONTRIBUTING.md` before submitting a pull request.
+
+## License
+
+A formal open-source license will be added after the repository's pre-publication legal and security review is complete.
