@@ -1,7 +1,8 @@
 {
-  "name": "react-example",
+  "name": "cantaja",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "AI-assisted platform for personalized music workflows and social automation integrations.",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
